@@ -1,28 +1,22 @@
 #include <Arduino.h>
+#include <Wire.h>
 #include <esp32_can.h>
+#include <lvgl.h>
 #include "lecture.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include "freertos/task.h"
 #include "ui.h"
-#include <lvgl.h>
-#include <TFT_eSPI.h>
 #include "TFTConfiguration.h"
 
 namespace
 {
-  lv_display_t *lvglDisplay = nullptr;
-  QueueHandle_t clusterQueue = nullptr;
+lv_display_t *lvglDisplay = nullptr;
+QueueHandle_t clusterQueue = nullptr;
 
-  constexpr uint16_t kArcMaxValue = 240U;
-  constexpr uint16_t kSpeedRawMax = 4095U;
-  constexpr uint8_t kOpacityOn = 255U;
-  constexpr uint8_t kOpacityOff = 0U;
-
-  TaskHandle_t canProcessTaskHandle = nullptr;
-  
-  constexpr uint32_t DRAW_BUF_SIZE = (320U * 240U / 10U * (LV_COLOR_DEPTH / 8U));
-  uint32_t draw_buf[DRAW_BUF_SIZE / 4];
+constexpr uint16_t kArcMaxValue = 240U;
+constexpr uint16_t kSpeedRawMax = 4095U;
+constexpr uint8_t kOpacityOn = 255U;
+constexpr uint8_t kOpacityOff = 0U;
 }
 
 static uint16_t ConvertSpeedToArcValue(uint16_t rawSpeed)
@@ -52,14 +46,24 @@ static void UpdateClusterUi(const Cluster_t &cluster)
   }
 }
 
-// If logging is enabled, it will inform the user about what is happening in the library
-void log_print(lv_log_level_t level, const char * buf) {
-  LV_UNUSED(level);
-  Serial.println(buf);
-  Serial.flush();
+static uint32_t lvgl_tick_get_cb()
+{
+  return static_cast<uint32_t>(millis());
 }
 
-// Get the Touchscreen data
+void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
+{
+  const uint32_t w = static_cast<uint32_t>(lv_area_get_width(area));
+  const uint32_t h = static_cast<uint32_t>(lv_area_get_height(area));
+
+  tft.startWrite();
+  tft.setAddrWindow(area->x1, area->y1, w, h);
+  tft.pushColors(reinterpret_cast<uint16_t *>(px_map), w * h, true);
+  tft.endWrite();
+
+  lv_display_flush_ready(disp);
+}
+
 void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data)
 {
   const bool touched = TS.CheckTouched();
@@ -96,34 +100,11 @@ void CanMsgHandler(CAN_FRAME *frame)
     xQueueOverwrite(clusterQueue, &cluster);
   }
 }
-
-void CanProcessTask(void *parameter)
-{
-  while (true)
-  {
-    if (clusterQueue != nullptr)
-    {
-      Cluster_t latestCluster{};
-      while (xQueueReceive(clusterQueue, &latestCluster, 0) == pdTRUE)
-      {
-        UpdateClusterUi(latestCluster);
-      }
-    }
-    vTaskDelay(pdMS_TO_TICKS(2));
-  }
-}
-
 void setup()
 {
-  Serial.begin(115200);
-  String LVGL_Arduino = String("LVGL Library Version: ") + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
-  Serial.println(LVGL_Arduino);
-  
   Wire.begin();
-  delay(100);
-
-  // Initialize CAN
   clusterQueue = xQueueCreate(1, sizeof(Cluster_t));
+
   CAN0.setCANPins(GPIO_NUM_35, GPIO_NUM_5);
   CAN0.begin(500000);
   const int clusterMailbox = CAN0.watchFor(Cluster_CANID);
@@ -136,29 +117,25 @@ void setup()
     CAN0.setGeneralCallback(CanMsgHandler);
   }
 
-  // Start LVGL
   lv_init();
-  // Register print function for debugging (if logging is enabled)
-  #if LV_USE_LOG
-  lv_log_register_print_cb(log_print);
-  #endif
+  lv_tick_set_cb(lvgl_tick_get_cb);
 
-  // Initialize the TFT display using the TFT_eSPI library
-  lvglDisplay = lv_tft_espi_create(screenWidth, screenHeight, draw_buf, sizeof(draw_buf));
-  lv_display_set_rotation(lvglDisplay, LV_DISPLAY_ROTATION_90);
-
-  // Initialize touchscreen
+  tft.begin();
+  tft.setRotation(3);
   TS.Calibrate(372, 3695, 501, 3838);
 
-  // Initialize an LVGL input device object (Touchscreen)
+  lvglDisplay = lv_display_create(screenWidth, screenHeight);
+  lv_display_set_default(lvglDisplay);
+  lv_display_set_flush_cb(lvglDisplay, my_disp_flush);
+  lv_display_set_color_format(lvglDisplay, LV_COLOR_FORMAT_RGB565);
+  lv_display_set_buffers(lvglDisplay, buf, nullptr, lvglBufferSizePixels * sizeof(lv_color_t),
+                         LV_DISPLAY_RENDER_MODE_PARTIAL);
+
   lv_indev_t *indev = lv_indev_create();
   lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(indev, my_touchpad_read);
   lv_indev_set_display(indev, lvglDisplay);
 
-  Serial.println("LVGL initialized.");
-
-  // Initialize UI
   ui_init();
 
   if (ui_LeftTurnLabel != nullptr)
@@ -175,23 +152,19 @@ void setup()
   {
     lv_arc_set_value(ui_Arc1, 0);
   }
-
-  Serial.println("Setup done, starting CAN processing task...");
-  
-  // Create CAN processing task
-  xTaskCreatePinnedToCore(
-      CanProcessTask,
-      "CanProcess",
-      4096,
-      nullptr,
-      1,
-      &canProcessTaskHandle,
-      1);
 }
 
 void loop()
 {
-  lv_task_handler();  // let the GUI do its work
-  lv_tick_inc(5);     // tell LVGL how much time has passed
-  delay(5);           // let this time pass
+  if (clusterQueue != nullptr)
+  {
+    Cluster_t latestCluster{};
+    while (xQueueReceive(clusterQueue, &latestCluster, 0) == pdTRUE)
+    {
+      UpdateClusterUi(latestCluster);
+    }
+  }
+
+  lv_timer_handler();
+  delay(5);
 }
