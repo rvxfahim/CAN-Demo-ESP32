@@ -1,0 +1,4 @@
+C:\Users\fahim\.platformio\penv\Scripts\platformio.exe run --target upload --environment rx_board --upload-port COM8
+C:\Users\fahim\.platformio\penv\Scripts\platformio.exe run --target upload --environment tx_board --upload-port COM5
+
+C:\Users\fahim\.platformio\penv\Scripts\platformio.exe run device monitor --environment rx_board --port COM8

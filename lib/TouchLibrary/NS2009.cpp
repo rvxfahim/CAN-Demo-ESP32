@@ -1,4 +1,3 @@
-#include <Wire.h>
 #include <Arduino.h>
 #include "NS2009.h"
 
