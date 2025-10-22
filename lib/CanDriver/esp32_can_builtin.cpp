@@ -12,7 +12,7 @@
 #include "esp32_can_builtin.h"
 
                                                                         //tx,         rx,           mode
-twai_general_config_t twai_general_cfg = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_17, GPIO_NUM_16, TWAI_MODE_NO_ACK);
+twai_general_config_t twai_general_cfg = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_17, GPIO_NUM_16, TWAI_MODE_NORMAL);
 twai_timing_config_t twai_speed_cfg = TWAI_TIMING_CONFIG_500KBITS();
 twai_filter_config_t twai_filters_cfg = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 

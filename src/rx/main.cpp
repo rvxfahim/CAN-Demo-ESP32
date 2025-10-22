@@ -1,170 +1,99 @@
+// Refactored RX firmware using modular state-machine architecture
+// Each subsystem is encapsulated in its own module with clear interfaces
+
 #include <Arduino.h>
-#include <Wire.h>
-#include <esp32_can.h>
-#include <lvgl.h>
-#include "lecture.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "ui.h"
-#include "TFTConfiguration.h"
+#include "EventQueue.h"
+#include "CanInterface.h"
+#include "UiController.h"
+#include "HealthMonitor.h"
+#include "SystemController.h"
+#include "common/MessageRouter.h"
+#include "IOModule.h"
 
 namespace
 {
-lv_display_t *lvglDisplay = nullptr;
-QueueHandle_t clusterQueue = nullptr;
+EventQueue eventQueue;
+CanInterface canInterface;
+UiController uiController;
+HealthMonitor healthMonitor;
+MessageRouter messageRouter;
+IOModule ioModule;
+SystemController* systemController = nullptr;
 
-constexpr uint16_t kArcMaxValue = 240U;
-constexpr uint16_t kSpeedRawMax = 4095U;
-constexpr uint8_t kOpacityOn = 255U;
-constexpr uint8_t kOpacityOff = 0U;
-}
-
-static uint16_t ConvertSpeedToArcValue(uint16_t rawSpeed)
+struct RouterSinks
 {
-  const uint16_t clamped = (rawSpeed > kSpeedRawMax) ? kSpeedRawMax : rawSpeed;
-  return static_cast<uint16_t>((static_cast<uint32_t>(clamped) * kArcMaxValue) / kSpeedRawMax);
-}
+  UiController* ui;
+  HealthMonitor* health;
+};
 
-static void UpdateClusterUi(const Cluster_t &cluster)
+RouterSinks sinks{&uiController, &healthMonitor};
+
+static void RouterUiHealthCb(const Cluster_t& c, uint32_t tsMs, void* ctx)
 {
-  if (ui_Arc1 != nullptr)
-  {
-    const uint16_t arcValue = ConvertSpeedToArcValue(cluster.speed);
-    lv_arc_set_value(ui_Arc1, static_cast<int32_t>(arcValue));
-  }
-
-  if (ui_LeftTurnLabel != nullptr)
-  {
-    const uint8_t leftAlpha = cluster.Left_Turn_Signal ? kOpacityOn : kOpacityOff;
-    lv_obj_set_style_text_opa(ui_LeftTurnLabel, leftAlpha, LV_PART_MAIN | LV_STATE_DEFAULT);
-  }
-
-  if (ui_RightTurnLabel != nullptr)
-  {
-    const uint8_t rightAlpha = cluster.Right_Turn_Signal ? kOpacityOn : kOpacityOff;
-    lv_obj_set_style_text_opa(ui_RightTurnLabel, rightAlpha, LV_PART_MAIN | LV_STATE_DEFAULT);
-  }
+  auto* s = static_cast<RouterSinks*>(ctx);
+  if (!s || !s->ui || !s->health) return;
+  UiData ui{
+    UiController::ConvertSpeedToArcValue(c.speed),
+    static_cast<bool>(c.Left_Turn_Signal),
+    static_cast<bool>(c.Right_Turn_Signal)
+  };
+  s->ui->EnqueueUiData(ui);
+  s->health->NotifyFrame();
+}
 }
 
-static uint32_t lvgl_tick_get_cb()
-{
-  return static_cast<uint32_t>(millis());
-}
-
-void my_disp_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
-{
-  const uint32_t w = static_cast<uint32_t>(lv_area_get_width(area));
-  const uint32_t h = static_cast<uint32_t>(lv_area_get_height(area));
-
-  tft.startWrite();
-  tft.setAddrWindow(area->x1, area->y1, w, h);
-  tft.pushColors(reinterpret_cast<uint16_t *>(px_map), w * h, true);
-  tft.endWrite();
-
-  lv_display_flush_ready(disp);
-}
-
-void my_touchpad_read(lv_indev_t *indev, lv_indev_data_t *data)
-{
-  const bool touched = TS.CheckTouched();
-
-  if (!touched)
-  {
-    data->state = LV_INDEV_STATE_RELEASED;
-    return;
-  }
-
-  TS.Scan();
-  data->state = LV_INDEV_STATE_PRESSED;
-  data->point.x = static_cast<int16_t>(TS.Y);
-  data->point.y = static_cast<int16_t>(TS.X);
-}
-
-void CanMsgHandler(CAN_FRAME *frame)
-{
-  if (frame == nullptr)
-  {
-    return;
-  }
-
-  if ((frame->id != Cluster_CANID) || (frame->length < Cluster_DLC) || (frame->extended != Cluster_IDE))
-  {
-    return;
-  }
-
-  Cluster_t cluster{};
-  Unpack_Cluster_lecture(&cluster, frame->data.bytes, frame->length);
-
-  if (clusterQueue != nullptr)
-  {
-    xQueueOverwrite(clusterQueue, &cluster);
-  }
-}
 void setup()
 {
-  Wire.begin();
-  clusterQueue = xQueueCreate(1, sizeof(Cluster_t));
-
-  CAN0.setCANPins(GPIO_NUM_35, GPIO_NUM_5);
-  CAN0.begin(500000);
-  const int clusterMailbox = CAN0.watchFor(Cluster_CANID);
-  if (clusterMailbox >= 0)
+  // Initialize event queue
+  if (!eventQueue.Init(10))
   {
-    CAN0.setCallback(static_cast<uint8_t>(clusterMailbox), CanMsgHandler);
-  }
-  else
-  {
-    CAN0.setGeneralCallback(CanMsgHandler);
+    // Fatal: cannot proceed without event queue
+    while (true)
+    {
+      delay(1000);
+    }
   }
 
-  lv_init();
-  lv_tick_set_cb(lvgl_tick_get_cb);
+  // Init message router
+  messageRouter.Init(8);
 
-  tft.begin();
-  tft.setRotation(3);
-  TS.Calibrate(372, 3695, 501, 3838);
-
-  lvglDisplay = lv_display_create(screenWidth, screenHeight);
-  lv_display_set_default(lvglDisplay);
-  lv_display_set_flush_cb(lvglDisplay, my_disp_flush);
-  lv_display_set_color_format(lvglDisplay, LV_COLOR_FORMAT_RGB565);
-  lv_display_set_buffers(lvglDisplay, buf, nullptr, lvglBufferSizePixels * sizeof(lv_color_t),
-                         LV_DISPLAY_RENDER_MODE_PARTIAL);
-
-  lv_indev_t *indev = lv_indev_create();
-  lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-  lv_indev_set_read_cb(indev, my_touchpad_read);
-  lv_indev_set_display(indev, lvglDisplay);
-
-  ui_init();
-
-  if (ui_LeftTurnLabel != nullptr)
+  // Create system controller and run boot sequence
+  systemController = new SystemController(eventQueue, canInterface, uiController, healthMonitor, messageRouter);
+  
+  if (!systemController->RunBootSequence())
   {
-    lv_obj_set_style_text_opa(ui_LeftTurnLabel, kOpacityOff, LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Boot failed, system is in Fault state
+    // Controller will display fault message
   }
 
-  if (ui_RightTurnLabel != nullptr)
-  {
-    lv_obj_set_style_text_opa(ui_RightTurnLabel, kOpacityOff, LV_PART_MAIN | LV_STATE_DEFAULT);
-  }
-
-  if (ui_Arc1 != nullptr)
-  {
-    lv_arc_set_value(ui_Arc1, 0);
-  }
+  // Initialize and start IO module (relays); subscribe to router
+  ioModule.Init();
+  ioModule.Start(messageRouter);
+  // Subscribe UI+Health to router after UI task is running
+  messageRouter.SubscribeCluster(&RouterUiHealthCb, &sinks);
+  // UI task is started inside SystemController::RunBootSequence()
 }
 
 void loop()
 {
-  if (clusterQueue != nullptr)
+  if (systemController == nullptr)
   {
-    Cluster_t latestCluster{};
-    while (xQueueReceive(clusterQueue, &latestCluster, 0) == pdTRUE)
-    {
-      UpdateClusterUi(latestCluster);
-    }
+    return;
   }
 
-  lv_timer_handler();
+  // Process all pending events
+  Event event;
+  while (eventQueue.Pop(event, 0))
+  {
+    systemController->Dispatch(event);
+  }
+
+  // Update health monitoring (checks for timeouts)
+  systemController->Update();
+
+  // Update IO blink timing
+  ioModule.Update(millis());
+
+  // Brief delay to prevent watchdog timeout
   delay(5);
 }

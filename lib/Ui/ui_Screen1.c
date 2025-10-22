@@ -22,7 +22,8 @@ void ui_Screen1_screen_init(void)
     lv_obj_remove_flag(ui_Screen1, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
     lv_obj_set_flex_flow(ui_Screen1, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(ui_Screen1, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_bg_image_src(ui_Screen1, &ui_img_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_Screen1, lv_color_hex(0x484848), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_Screen1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Panel2 = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_Panel2, 314);
