@@ -44,13 +44,25 @@ void IOModule::Update(uint32_t nowMs)
     rightRequested_ = false;
   }
 
+  // Phase sync requested when a rising edge was detected in OnCluster_
+  if (phaseSync_)
+  {
+    // Start from ON phase for any requested side, align next toggle to half period
+    leftOn_ = leftRequested_;
+    rightOn_ = rightRequested_;
+    nextToggleMs_ = nowMs + kBlinkPeriodMs_ / 2;
+    ApplyOutputs_();
+    phaseSync_ = false;
+    return; // let next tick handle regular blinking
+  }
+
   // If requested, blink; otherwise ensure off
-  bool needBlink = leftRequested_ || rightRequested_;
+  const bool needBlink = leftRequested_ || rightRequested_;
   if (needBlink)
   {
     if (nowMs >= nextToggleMs_)
     {
-      nextToggleMs_ = nowMs + kBlinkPeriodMs_ / 2; // 2 Hz
+      nextToggleMs_ = nowMs + kBlinkPeriodMs_ / 2; // toggle every half period
       if (leftRequested_) leftOn_ = !leftOn_; else leftOn_ = false;
       if (rightRequested_) rightOn_ = !rightOn_; else rightOn_ = false;
       ApplyOutputs_();
@@ -81,30 +93,19 @@ void IOModule::OnCluster_(const Cluster_t& msg, uint32_t tsMs)
   const bool newLeftReq = msg.Left_Turn_Signal != 0;
   const bool newRightReq = msg.Right_Turn_Signal != 0;
 
-  // Edge-detect start requests to align blink phase once
-  bool rising = false;
-  if (newLeftReq && !leftRequested_)
-  {
-    // start left blinking from ON phase
-    leftOn_ = true;
-    rising = true;
-  }
-  if (newRightReq && !rightRequested_)
-  {
-    // start right blinking from ON phase
-    rightOn_ = true;
-    rising = true;
-  }
+  // Edge-detect start requests to align blink phase once; do not touch GPIO here
+  const bool risingLeft = newLeftReq && !leftRequested_;
+  const bool risingRight = newRightReq && !rightRequested_;
 
   leftRequested_ = newLeftReq;
   rightRequested_ = newRightReq;
-  if (rising)
+
+  if (risingLeft || risingRight)
   {
-    // Start half-period window from now
-    nextToggleMs_ = tsMs + kBlinkPeriodMs_ / 2;
-    ApplyOutputs_(); // reflect ON immediately
+    // Ask Update() to sync phase and reflect ON immediately on its next tick
+    phaseSync_ = true;
   }
-  // Do not reset nextToggleMs_ on every message; let timer drive cadence
+  // Do not reset nextToggleMs_ on every message; let Update() drive cadence
 }
 
 void IOModule::ApplyOutputs_()

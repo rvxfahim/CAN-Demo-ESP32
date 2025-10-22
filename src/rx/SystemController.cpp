@@ -121,7 +121,7 @@ void SystemController::Update()
   // Check for timeout in Active state
   if (currentState_ == SystemState::Active || currentState_ == SystemState::Degraded)
   {
-    healthMonitor_.CheckTimeout(eventQueue_);
+    healthMonitor_.CheckTimeout(eventQueue_, messageRouter_);
   }
 }
 

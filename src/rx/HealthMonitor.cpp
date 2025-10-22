@@ -1,33 +1,46 @@
 #include "HealthMonitor.h"
+#include "common/MessageRouter.h"
+#include <Arduino.h>
 
-HealthMonitor::HealthMonitor() : lastFrameTick_(0)
+HealthMonitor::HealthMonitor()
 {
 }
 
-void HealthMonitor::NotifyFrame()
+bool HealthMonitor::CheckTimeout(EventQueue& eventQueue, const MessageRouter& router)
 {
-  lastFrameTick_ = xTaskGetTickCount();
-}
-
-bool HealthMonitor::CheckTimeout(EventQueue& eventQueue)
-{
-  const TickType_t currentTick = xTaskGetTickCount();
-  const TickType_t elapsedTicks = currentTick - lastFrameTick_;
-  const TickType_t timeoutTicks = pdMS_TO_TICKS(timeoutMs_);
-
-  if (elapsedTicks >= timeoutTicks && lastFrameTick_ != 0)
+  uint32_t lastSeenMs = 0;
+  if (!router.GetLastSeenMs(lastSeenMs))
   {
-    Event event = Event::MakeFrameTimeout();
-    eventQueue.Push(event);
-    return true;
+    // No data ever published yet
+    inTimeout_ = false; // treat as not timed out yet; avoid spamming
+    return false;
+  }
+  const uint32_t nowMs = millis();
+  const uint32_t elapsed = nowMs - lastSeenMs;
+  if (elapsed >= timeoutMs_)
+  {
+    // Only emit once when crossing into timeout state
+    if (!inTimeout_)
+    {
+      inTimeout_ = true;
+      Event event = Event::MakeFrameTimeout();
+      eventQueue.Push(event);
+      return true;
+    }
+    return false; // already in timeout; don't spam queue
   }
 
+  // Fresh data seen again; clear timeout state
+  if (inTimeout_)
+  {
+    inTimeout_ = false;
+  }
   return false;
 }
 
 void HealthMonitor::Reset()
 {
-  lastFrameTick_ = 0;
+  inTimeout_ = false;
 }
 
 void HealthMonitor::SetTimeoutMs(uint32_t timeoutMs)

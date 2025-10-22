@@ -4,19 +4,22 @@
 #include "freertos/FreeRTOS.h"
 #include "EventQueue.h"
 
+class MessageRouter; // forward declare for pull model
+
 class HealthMonitor
 {
 public:
   HealthMonitor();
 
-  void NotifyFrame();
-  bool CheckTimeout(EventQueue& eventQueue);
+  // Pull model: check router's last-seen timestamp for staleness
+  bool CheckTimeout(EventQueue& eventQueue, const MessageRouter& router);
   void Reset();
   void SetTimeoutMs(uint32_t timeoutMs);
 
 private:
-  TickType_t lastFrameTick_;
   uint32_t timeoutMs_ = 1500; // Increased default timeout to reduce flicker to Degraded/Waiting
+  // Emit only once when crossing the timeout threshold; cleared when fresh data arrives
+  bool inTimeout_ = false;
 };
 
 #endif // HEALTH_MONITOR_H

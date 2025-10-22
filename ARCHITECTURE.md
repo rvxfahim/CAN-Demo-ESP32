@@ -1,141 +1,108 @@
-# RX Firmware Architecture Diagram
+# RX Firmware Architecture (Implemented)
+
+This document reflects the current modular architecture with a central MessageRouter and an event-driven state machine.
+
+## Top-Level Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         MAIN.CPP (Entry Point)                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │EventQueue│  │CanInterface│ │UiController│ │HealthMonitor │   │
-│  └────┬─────┘  └─────┬──────┘ └─────┬──────┘ └──────┬───────┘   │
-│       │              │              │               │            │
-│       └──────────────┴──────────────┴───────────────┘            │
-│                             │                                    │
-│                    ┌────────▼─────────┐                          │
-│                    │ SystemController │                          │
-│                    │  (State Machine) │                          │
-│                    └──────────────────┘                          │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │EventQueue│  │ CanInterface │  │ SystemController │          │
+│  └────┬─────┘  └──────┬───────┘  └────────┬───────┘            │
+│       │                │                   │                    │
+│       └────────────────┴───────────────────┘                    │
+│                           │                                     │
+│                    ┌──────▼───────┐                              │
+│                    │ MessageRouter│  (pub/sub + last-seen)       │
+│                    └──────┬───────┘                              │
+│                           │                                     │
+│      ┌────────────────────┼──────────────────────┐               │
+│  ┌───▼───────┐        ┌───▼───────┐        ┌────▼────────┐      │
+│  │UiController│        │ IOModule  │        │HealthMonitor│      │
+│  └────────────┘        └───────────┘        └─────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│                        STATE MACHINE FLOW                         │
-│                                                                   │
-│   ┌──────┐   I2C+CAN Init   ┌─────────────┐   LVGL Init         │
-│   │ Boot ├──────────────────►DisplayInit  ├──────────┐           │
-│   └───┬──┘      Success      └─────────────┘  Success│           │
-│       │                                               │           │
-│       │ Fail                                     ┌────▼────────┐  │
-│       │                                          │WaitingForData│  │
-│       │                                          └────┬─────────┘  │
-│       │                                               │            │
-│       │                                    ClusterFrame Event      │
-│       │                                               │            │
-│   ┌───▼───┐◄──────────────────────────────────┐  ┌──▼──────┐     │
-│   │ Fault │         Error/InitFail            │  │ Active  │     │
-│   └───────┘◄─────────────┐                    │  └──┬──┬───┘     │
-│                           │                    │     │  │         │
-│                           │                    │     │  │ Frame   │
-│                      ┌────┴────────┐  Timeout  │     │  │ Timeout │
-│                      │  Degraded   ├───────────┘     │  │         │
-│                      │(Stale Data) │◄────────────────┘  │         │
-│                      └─────────────┘   ClusterFrame     │         │
-│                                         (Recovery)       │         │
-│                                                          │         │
-│                      HealthMonitor checks every loop ────┘         │
-└──────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│                        EVENT FLOW (ISR → MAIN)                    │
-│                                                                   │
-│  CAN ISR                   EventQueue                 Main Loop  │
-│    │                           │                          │       │
-│    │  CanMsgHandler()          │                          │       │
-│    ├──► Validate Frame         │                          │       │
-│    │    Unpack DBC             │                          │       │
-│    │    MakeClusterFrame()     │                          │       │
-│    └───► PushFromISR() ────────┤                          │       │
-│                                 │   Pop()                  │       │
-│                                 ├────────────────────────► │       │
-│                                 │                          │       │
-│                                 │   SystemController::     │       │
-│                                 │   Dispatch(event)        │       │
-│                                 │         │                │       │
-│                                 │         ▼                │       │
-│                                 │   UiController::         │       │
-│                                 │   ApplyCluster()         │       │
-│                                 │         │                │       │
-│                                 │         ▼                │       │
-│                                 │   LVGL Widgets Updated   │       │
-│                                 │                          │       │
-│  Timer Check (every loop)       │                          │       │
-│    │                            │                          │       │
-│    │  HealthMonitor::           │                          │       │
-│    │  CheckTimeout()            │                          │       │
-│    └───► MakeFrameTimeout() ───┤                          │       │
-│              (if expired)       │                          │       │
-└──────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│                    MODULE RESPONSIBILITIES                        │
-│                                                                   │
-│  EventQueue:         Type-safe event bus (FreeRTOS queue)        │
-│                      - Push/Pop events                            │
-│                      - ISR-safe operations                        │
-│                                                                   │
-│  CanInterface:       CAN hardware abstraction                    │
-│                      - Setup GPIO/pins/filters                    │
-│                      - ISR callback validates & unpacks           │
-│                      - Pushes ClusterFrame events                 │
-│                                                                   │
-│  UiController:       Display & GUI management                    │
-│                      - LVGL/TFT/Touch initialization              │
-│                      - Widget updates (arc, turn signals)         │
-│                      - Degraded/Fault overlays                    │
-│                      - Timer servicing                            │
-│                                                                   │
-│  HealthMonitor:      Data freshness watchdog                     │
-│                      - Tracks last frame timestamp                │
-│                      - Emits FrameTimeout events                  │
-│                      - 500ms threshold                            │
-│                                                                   │
-│  SystemController:   State machine orchestrator                  │
-│                      - Owns SystemState enum                      │
-│                      - Dispatches events to modules               │
-│                      - Manages state transitions                  │
-│                      - Coordinates boot sequence                  │
-└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Design Principles
-
-1. **Separation of Concerns**: Each module has one clear responsibility
-2. **Event-Driven**: ISR → Events → State Machine (no direct coupling)
-3. **ISR Safety**: All ISR callbacks only validate & queue, heavy work in main loop
-4. **Testability**: Modules can be unit tested independently
-5. **Maintainability**: Adding features only requires modifying relevant module
-6. **State Machine**: Clear lifecycle management with explicit transitions
-
-## Example: ClusterFrame Processing Path
+## State Machine Flow
 
 ```
-1. TX Board sends CAN frame (ID 0x65, 3 bytes)
-2. ESP32 CAN controller triggers interrupt
-3. CanInterface::CanMsgHandler() called (ISR context)
-   - Validates ID/DLC/IDE
-   - Unpacks via DBC: Unpack_Cluster_lecture()
-   - Creates ClusterFrame event
-   - Pushes to EventQueue (ISR-safe)
-4. Main loop: EventQueue.Pop() retrieves event
-5. SystemController::Dispatch() receives event
-   - Checks current state (Active/WaitingForData/Degraded)
-   - Calls UiController::ApplyCluster()
-   - Calls HealthMonitor::NotifyFrame()
-6. UiController updates:
-   - Speed arc value (0-240 range)
-   - Left turn indicator opacity (0 or 255)
-   - Right turn indicator opacity (0 or 255)
-   - Hides degraded warning if visible
-7. HealthMonitor resets watchdog timer
-8. Next loop iteration: HealthMonitor::CheckTimeout()
-   - If >500ms since last frame → pushes FrameTimeout event
-   - SystemController transitions Active → Degraded
-   - UiController::ShowDegraded() displays warning
+Boot → DisplayInit → WaitingForData → Active
+Active ⇄ Degraded (stale data)
+Any → Fault (unrecoverable)
+
+Triggers:
+- First Cluster frame → WaitingForData → Active
+- HealthMonitor timeout → Active → Degraded
+- New Cluster after Degraded → Degraded → Active (auto-recovery)
 ```
+
+## Event/Data Flow
+
+```
+CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
+
+1) ISR (CanInterface::CanMsgHandler)
+   - Validates ID/DLC/IDE for Cluster (0x65, 3 bytes, std)
+   - Unpacks to Cluster_t via Unpack_Cluster_lecture()
+   - Pushes Event::ClusterFrame to EventQueue (ISR-safe)
+
+2) Main loop
+   - Pop event; SystemController::Dispatch(event)
+   - Publish Cluster_t to MessageRouter with millis() timestamp
+   - Update state transitions
+
+3) Subscribers
+   - UiController: maps Cluster_t → widgets; services lv_timer_handler()
+   - IOModule: drives relay GPIOs; internal 1 Hz blink independent of bus rate
+   - HealthMonitor: pull last-seen from router; emits FrameTimeout to queue
+```
+
+## Module Responsibilities
+
+- EventQueue (`src/rx/EventQueue.{h,cpp}`)
+  - Typed FreeRTOS queue with ISR-safe push; factories for events
+
+- CanInterface (`src/rx/CanInterface.{h,cpp}`)
+  - Init CAN (pins 35/5, 500 kbps), mailbox filter for 0x65
+  - ISR: validate → unpack DBC → push ClusterFrame event
+
+- MessageRouter (`src/common/MessageRouter.{h,cpp}`)
+  - Pub/sub for Cluster topic; sticky last value; last-seen timestamp (ms)
+
+- UiController (`src/rx/UiController.{h,cpp}`)
+  - LVGL/TFT/Touch init; updates `ui_Arc1`, left/right labels
+  - Subscribes to router; runs UI task/timers
+
+- IOModule (`src/rx/IOModule.{h,cpp}`)
+  - Relay control for turn indicators; subscribes to router
+  - Blink cadence decoupled from CAN message rate
+
+- HealthMonitor (`src/rx/HealthMonitor.{h,cpp}`)
+  - Pull model: checks router last-seen; emits FrameTimeout on staleness
+
+- SystemController (`src/rx/SystemController.{h,cpp}`)
+  - Orchestrates states; publishes Cluster_t to router; handles recovery
+
+## Design Principles
+
+1. Event-driven isolation: ISR only validates/unpacks/queues
+2. Central truth: Router caches last value + timestamp for freshness
+3. Decoupled consumers: UI/IO subscribe; no direct controller wiring
+4. Robustness: HealthMonitor detects loss and triggers Degraded; auto-recovery
+5. Portability: DBC-generated types (`Cluster_t`) are the single frame model
+
+## Example: Cluster Processing Path
+
+```
+1) TX sends Cluster (0x65, 3 bytes)
+2) ISR validates + Unpack_Cluster_lecture() → EventQueue::MakeClusterFrame()
+3) Main pops event → SystemController publishes Cluster_t to MessageRouter
+4) UiController subscriber updates:
+   - lv_arc_set_value(ui_Arc1, map(speed_raw, 0..4095 → 0..240))
+   - lv_obj_set_style_text_opa(left/right, 0 or 255)
+5) IOModule toggles relays based on left/right with 1 Hz cadence
+6) HealthMonitor sees last-seen aging; if > threshold → FrameTimeout → Degraded
+7) New frame arrives → router timestamp updated → Active
+```
+

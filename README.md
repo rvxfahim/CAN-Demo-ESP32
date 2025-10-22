@@ -1,81 +1,113 @@
-# RX Firmware State-Machine Refactor Plan
+# CAN Lecture RX Firmware — Modular Architecture (with Message Router)
 
-This document instructs the implementation agent on how to reorganize the RX firmware into a modular state-machine architecture. Follow each step in order and keep modules decoupled via clearly defined interfaces.
+This README describes the implemented RX firmware architecture. It replaces the earlier refactor plan with the current, working design that introduces a MessageRouter for modular fan-out of CAN messages and a dedicated IO relay module for blinkers.
 
-## 1. Target Architecture
-- **SystemController module**: owns the high-level `SystemState` machine and orchestrates transitions.
-- **EventQueue module**: central buffer that converts CAN callbacks and timers into typed events consumed by the controller.
-- **CanInterface module**: wraps CAN initialization, filters, ISR callbacks, and parsing of `Cluster_t` frames.
-- **UiController module**: encapsulates LVGL/TFT/Touch init plus all widget updates based on sanitized data.
-- **HealthMonitor module**: tracks freshness of incoming data (timeouts) and escalates warnings/faults.
-- **Application entry points (`setup`/`loop`)**: become thin shims that delegate to the modules above.
+## High-level data flow
 
-Each module should have its own header/source pair inside `src/` (or `lib/` if preferred) so the resulting code base is easy to test and maintain.
+1) CAN ISR (esp32_can) → EventQueue
+   - `CanInterface` sets up pins, bitrate, and mailbox filtering for `Cluster` message (ID 0x65).
+   - ISR validates ID/DLC/IDE and unpacks the frame into `Cluster_t` (generated from DBC), then pushes `Event::ClusterFrame` to a FreeRTOS queue (`EventQueue`).
 
-## 2. State Definitions
-Create an enum class in `SystemController` describing the lifecycle:
-1. `Boot` – aggregate hardware init; enter `DisplayInit` when all subsystems report OK, otherwise `Fault`.
-2. `DisplayInit` – configure LVGL, TFT, touch, and UI assets; success → `WaitingForData`, failure → `Fault`.
-3. `WaitingForData` – start frame timeout timer; stay idle until `ClusterFrame` event arrives.
-4. `Active` – consume cluster frames, refresh UI, reset watchdog on every valid frame.
-5. `Degraded` – triggered by watchdog expiry; show stale-data warning while still processing late frames.
-6. `Fault` – display fatal overlay and suspend non-critical tasks; allow manual retry hook if needed.
+2) SystemController (state machine) → MessageRouter
+   - `SystemController::Dispatch(EventType::ClusterFrame)` handles state transitions (`WaitingForData` → `Active`, recovery from `Degraded`).
+   - It unconditionally publishes the `Cluster_t` to the `MessageRouter` with a millisecond timestamp.
 
-Transitions are driven exclusively by events generated in `EventQueue`.
+3) MessageRouter (central pub/sub)
+   - Typed topic for `Cluster_t` with subscribe/unsubscribe and a sticky last-value cache.
+   - Maintains a last-seen timestamp for freshness checks.
 
-## 3. Event Model
-Define `enum class EventType` covering:
-- `InitOk`, `InitFail` (with subsystem identifier)
-- `ClusterFrame` (payload: latest `Cluster_t`)
-- `FrameTimeout`
-- `Error` (payload: error code or enum)
+4) Subscribers consume from the router
+   - `UiController`: subscribed via a small adapter, maps `Cluster_t` to `UiData` and enqueues it to the UI task (LVGL thread).
+   - `IOModule` (blinkers): subscribed; drives two relay GPIOs for left/right indicators with its own blink state machine (independent of message rate).
+   - `HealthMonitor`: pull model; no longer notified by subscribers. It queries the router’s last-seen timestamp to detect staleness and emits `FrameTimeout` events.
 
-Implement `struct Event` carrying the type and optional payloads. `EventQueue` should provide `Push(Event)` and `Pop(Event&)` helpers wrapping FreeRTOS queues.
+5) SystemController::Update()
+   - Periodically asks `HealthMonitor` to check for timeouts (pulling timestamps from the router) and transitions to `Degraded` on staleness.
 
-## 4. Module Responsibilities
-- **CanInterface**
-  - Expose `bool Init(EventQueue&)` for boot-time configuration.
-  - In ISR callback, parse `Cluster_t` only when ID/DLC/IDE match, then push `ClusterFrame`.
-  - Guard against queue saturation using `xQueueOverwriteFromISR` equivalents.
+## State machine
 
-- **UiController**
-  - Provide `bool Init()` (display + touch + LVGL + `ui_init`).
-  - Encapsulate helper such as `void ApplyCluster(const Cluster_t&)`, `void ShowDegraded()`, `void ShowFault()`.
-  - Keep static conversion utilities private to this module.
+`SystemState` lifecycle is unchanged but simplified by the router:
 
-- **HealthMonitor**
-  - Maintain `TickType_t lastFrameTick`.
-  - Expose `void NotifyFrame()` and `bool CheckTimeout(EventQueue&)` to emit `FrameTimeout` events at configured intervals (e.g., 500 ms).
+- Boot → DisplayInit → WaitingForData → Active
+- Active ⇄ Degraded on `FrameTimeout` and recovery when frames resume
+- Fault for unrecoverable errors
 
-- **SystemController**
-  - Hold current state and per-state entry/exit hooks.
-  - Provide `void Dispatch(const Event&)` to interpret events and call module methods.
-  - Call `HealthMonitor::CheckTimeout` on every loop tick.
+`SystemController` still owns transitions and UI screen changes; modules subscribe to data via the router rather than being hard-wired in the controller.
 
-## 5. Refactoring Steps
-1. Extract current CAN setup and callback logic from `src/rx/main.cpp` into `CanInterface`.
-2. Move LVGL/TFT/touch setup plus `UpdateClusterUi` helpers into `UiController`.
-3. Build the `EventQueue` abstraction around the existing FreeRTOS queue.
-4. Introduce `HealthMonitor` with configurable timeout constants.
-5. Implement `SystemController` wiring the modules together and handling state transitions.
-6. Rewrite `setup()` to instantiate the modules, run boot sequence, and enqueue initial events.
-7. Rewrite `loop()` to pump events from `EventQueue`, call `SystemController::Dispatch`, service LVGL timers, and run the health check.
-8. Add comments documenting non-obvious logic per the project style (concise, purpose-driven).
+## Modules (responsibilities and locations)
 
-## 6. Testing & Validation
-- Provide unit tests or at least integration tests for state transitions where feasible.
-- On hardware, verify:
-  - Successful boot reaches `Active` when CAN traffic is present.
-  - Removing CAN traffic triggers `Degraded` overlay within the timeout window.
-  - Reintroducing traffic recovers to `Active` without reboot.
-  - Fault paths display the correct UI and halt updates.
+- CanInterface (`src/rx/CanInterface.{h,cpp}`)
+  - Configures CAN and registers ISR.
+  - Unpacks `Cluster_t` in ISR and pushes `Event::ClusterFrame` to `EventQueue`.
 
-## 7. Deliverables
-- Updated source files under `src/` (or dedicated subfolders) matching the modular layout.
-- Revised `platformio.ini` only if new files or build flags require it.
-- Brief summary of implemented modules and any deviations from this plan.
+- EventQueue (`src/rx/EventQueue.{h,cpp}`)
+  - FreeRTOS queue wrapper for typed events from ISR and other producers.
 
-## 8. Reference Material
-- When low-level return types or HAL semantics are unclear, consult the ESP-IDF headers under `C:\Users\fahim\.platformio\packages\framework-arduinoespressif32\tools\sdk\esp32` (also mounted in the workspace).
+- MessageRouter (`src/common/MessageRouter.{h,cpp}`)
+  - Typed subscription API: `SubscribeCluster`, `PublishCluster`.
+  - Sticky last-value cache and `GetLastSeenMs()` for freshness.
+  - All subscribers run in task context (publish is called from main loop via controller dispatch).
 
-Follow these instructions to keep the refactor modular, testable, and aligned with the defined state-machine design.
+- UiController (`src/rx/UiController.{h,cpp}`)
+  - Initializes LVGL, TFT_eSPI, touch, and SquareLine-generated UI.
+  - Dedicated UI task with queues; subscribed to router for `Cluster` updates (via adapter in `main.cpp`).
+
+- IOModule (`src/rx/IOModule.{h,cpp}`)
+  - Drives two relay outputs for left/right turn indicators.
+  - Subscribes to `Cluster` via router.
+  - Internal blink state machine at 1 Hz (500 ms ON / 500 ms OFF), decoupled from message rate.
+  - Safe default OFF if no update for >1s.
+  - Relay pins configurable in `include/IOPins.h` (defaults: GPIO 25 and 26).
+
+- HealthMonitor (`src/rx/HealthMonitor.{h,cpp}`)
+  - Pull model for staleness: `CheckTimeout(EventQueue&, const MessageRouter&)` reads `GetLastSeenMs()` and emits `FrameTimeout` if stale (default 1500 ms, configurable).
+
+- SystemController (`src/rx/SystemController.{h,cpp}`)
+  - Orchestrates boot, display init, waiting/active/degraded/fault.
+  - Publishes `Cluster_t` to router on each frame event and handles state transitions.
+
+- Entry points (`src/rx/main.cpp`)
+  - Instantiates modules and runs the boot sequence.
+  - Subscribes UI to router; starts IO module subscription.
+  - Calls `ioModule.Update(millis())` for blink timing and `systemController.Update()` for health.
+
+## Message formats and DBC integration
+
+- Source of truth: `tools/Lecture.dbc`.
+- Code generation: `lib/Generated/lib/lecture.{c,h}` (do not edit generated files).
+- Wrapper: `src/generated_lecture_dbc.c` includes generated code; use `Cluster_t`, `Pack_Cluster_lecture`, `Unpack_Cluster_lecture`.
+
+## Extending the system
+
+- To add a new consumer of `Cluster` data, subscribe via `MessageRouter::SubscribeCluster(cb, ctx)` and process updates in task context.
+- For additional CAN messages/IDs:
+  - Extend `CanInterface` to push new events.
+  - Add typed topics (similar to `Cluster`) in `MessageRouter` or expose per-ID raw subscriptions.
+  - Have modules subscribe to those topics rather than plumbing through `SystemController`.
+
+## Build, upload, monitor (PlatformIO)
+
+- Build RX: `pio run -e rx_board`
+- Upload RX: `pio run -e rx_board -t upload`
+- Monitor RX: `pio device monitor -e rx_board`
+
+Serial ports and speeds are set in `platformio.ini` per environment.
+
+## Notable implementation details
+
+- ISR is minimal and never calls subscribers; it only validates, unpacks, and queues events.
+- Router timestamps are in milliseconds (`millis()`), providing a single source of truth for freshness.
+- UI and IO operate fully from router data; controller no longer pushes UI payloads directly.
+- Blinkers are immune to CAN update rate; they align phase on rising edges and toggle at a fixed cadence.
+
+## Troubleshooting
+
+- If the UI doesn’t update: ensure UI task started before router subscription (it is subscribed after `RunBootSequence()` in `main.cpp`).
+- If blinkers don’t actuate: verify relay pins in `include/IOPins.h` match hardware; confirm `Cluster.Left_Turn_Signal`/`Right_Turn_Signal` bits from TX.
+- If system drops to Degraded: router last-seen likely stale; check TX is sending `Cluster` frames and bus wiring.
+
+## References
+
+- LVGL v9.1
+- esp32_can (custom wrapper in `lib/CanDriver`)
+- DBC generator under `tools/c-coderdbc/`

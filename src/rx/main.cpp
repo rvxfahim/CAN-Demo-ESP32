@@ -23,22 +23,20 @@ SystemController* systemController = nullptr;
 struct RouterSinks
 {
   UiController* ui;
-  HealthMonitor* health;
 };
 
-RouterSinks sinks{&uiController, &healthMonitor};
+RouterSinks sinks{&uiController};
 
-static void RouterUiHealthCb(const Cluster_t& c, uint32_t tsMs, void* ctx)
+static void RouterUiCb(const Cluster_t& c, uint32_t tsMs, void* ctx)
 {
   auto* s = static_cast<RouterSinks*>(ctx);
-  if (!s || !s->ui || !s->health) return;
+  if (!s || !s->ui) return;
   UiData ui{
     UiController::ConvertSpeedToArcValue(c.speed),
     static_cast<bool>(c.Left_Turn_Signal),
     static_cast<bool>(c.Right_Turn_Signal)
   };
   s->ui->EnqueueUiData(ui);
-  s->health->NotifyFrame();
 }
 }
 
@@ -70,7 +68,7 @@ void setup()
   ioModule.Init();
   ioModule.Start(messageRouter);
   // Subscribe UI+Health to router after UI task is running
-  messageRouter.SubscribeCluster(&RouterUiHealthCb, &sinks);
+  messageRouter.SubscribeCluster(&RouterUiCb, &sinks);
   // UI task is started inside SystemController::RunBootSequence()
 }
 
@@ -94,6 +92,5 @@ void loop()
   // Update IO blink timing
   ioModule.Update(millis());
 
-  // Brief delay to prevent watchdog timeout
-  delay(5);
+  taskYIELD();
 }

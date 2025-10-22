@@ -44,6 +44,8 @@ private:
   uint32_t nextToggleMs_ = 0;
   bool leftOn_ = false;
   bool rightOn_ = false;
+  // Set by OnCluster_ on rising edge; consumed by Update() to align phase and drive first ON
+  volatile bool phaseSync_ = false;
 };
 
 #endif // IO_MODULE_H
