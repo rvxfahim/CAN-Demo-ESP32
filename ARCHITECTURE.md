@@ -1,8 +1,8 @@
-# RX Firmware Architecture (Implemented)
+# Firmware Architecture (Implemented)
 
-This document reflects the current modular architecture with a central MessageRouter and an event-driven state machine.
+This document reflects the current modular architecture with a central MessageRouter and an event-driven state machine on the RX board, plus a minimal TX board that publishes CAN frames from DBC-generated types.
 
-## Top-Level Layout
+## RX: Top-Level Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -24,7 +24,7 @@ This document reflects the current modular architecture with a central MessageRo
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## State Machine Flow
+## RX: State Machine Flow
 
 ```
 Boot → DisplayInit → WaitingForData → Active
@@ -37,7 +37,7 @@ Triggers:
 - New Cluster after Degraded → Degraded → Active (auto-recovery)
 ```
 
-## Event/Data Flow
+## RX: Event/Data Flow
 
 ```
 CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
@@ -58,7 +58,7 @@ CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
    - HealthMonitor: pull last-seen from router; emits FrameTimeout to queue
 ```
 
-## Module Responsibilities
+## RX: Module Responsibilities
 
 - EventQueue (`src/rx/EventQueue.{h,cpp}`)
   - Typed FreeRTOS queue with ISR-safe push; factories for events
@@ -84,7 +84,7 @@ CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
 - SystemController (`src/rx/SystemController.{h,cpp}`)
   - Orchestrates states; publishes Cluster_t to router; handles recovery
 
-## Design Principles
+## RX: Design Principles
 
 1. Event-driven isolation: ISR only validates/unpacks/queues
 2. Central truth: Router caches last value + timestamp for freshness
@@ -92,7 +92,7 @@ CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
 4. Robustness: HealthMonitor detects loss and triggers Degraded; auto-recovery
 5. Portability: DBC-generated types (`Cluster_t`) are the single frame model
 
-## Example: Cluster Processing Path
+## RX: Example — Cluster Processing Path
 
 ```
 1) TX sends Cluster (0x65, 3 bytes)
@@ -105,4 +105,26 @@ CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
 6) HealthMonitor sees last-seen aging; if > threshold → FrameTimeout → Degraded
 7) New frame arrives → router timestamp updated → Active
 ```
+
+---
+
+## TX: Overview
+
+TX board is a small producer of `Cluster` frames (ID 0x65), without LVGL or UI. It runs independently and can be used as a signal generator for RX testing.
+
+- Entry point: `src/tx/main.cpp`
+- Build env: `env:tx_board` in `platformio.ini` (no LVGL/TFT)
+- DBC types: `Cluster_t`, packed via `Pack_Cluster_lecture`
+- Driver usage:
+  - `CAN0.setCANPins(GPIO_NUM_35, GPIO_NUM_5);`
+  - `CAN0.begin(500000);`
+  - `CAN0.setDebuggingMode(true);` (verbose diagnostics)
+- Frame cadence: typically 20–100 Hz during tests
+- Scope for extension: additional messages can be added by packing other DBC-defined signals
+
+## Build/Env Notes
+
+- Two PlatformIO environments: `rx_board` (UI + CAN) and `tx_board` (CAN only)
+- Shared code goes under `src/common/` and DBC wrapper `src/generated_lecture_dbc.c`
+- Per-board selection is controlled by `build_src_filter` and `build_flags` (RX_BOARD / TX_BOARD)
 

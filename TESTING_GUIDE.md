@@ -1,4 +1,4 @@
-# RX Firmware Testing Guide
+# RX Firmware Testing Guide (MessageRouter Architecture)
 
 ## Build & Upload
 
@@ -17,7 +17,7 @@ Expected output:
 pio run -e rx_board -t upload
 ```
 
-Upload port: COM8 (configured in platformio.ini)
+Upload port: as configured in `platformio.ini` (example: COM8)
 
 ### 3. Monitor Serial Output
 ```bash
@@ -77,11 +77,11 @@ Waiting for CAN data...
 
 **Test Steps**:
 1. Disconnect TX board or stop transmission
-2. Wait 500ms
+2. Wait for timeout interval (default 1500 ms; configurable)
 3. Observe serial and display
 
 **Expected Behavior**:
-1. Serial: "WARNING: Stale data detected" (within 500-600ms)
+1. Serial: "WARNING: Stale data detected" (within ~1.5s by default)
 2. Display shows yellow "STALE DATA" overlay at top center
 3. UI widgets freeze at last received values
 
@@ -213,7 +213,7 @@ void loop() {
 2. Stop TX transmission
 3. Measure time to "WARNING: Stale data detected"
 
-**Target**: 500ms ±50ms
+**Target**: 1500ms ±100ms (default; adjust if `kTimeoutMs` changed)
 
 ---
 
@@ -273,15 +273,14 @@ Add to `.github/workflows/build.yml`:
 
 ## Sign-Off Checklist
 
-Before considering refactor complete, verify:
+Before release, verify:
 
 - [ ] All 10 tests above pass
 - [ ] No memory leaks (run for 24hrs without reset)
 - [ ] Build warnings = 0
 - [ ] Serial logging disabled or DEBUG-only in production
-- [ ] Code reviewed against README.md requirements
-- [ ] Git commit messages reference refactor tasks
-- [ ] REFACTOR_SUMMARY.md and ARCHITECTURE.md committed
+- [ ] Code reviewed against README.md and ARCHITECTURE.md
+- [ ] All doc references updated (README.md, ARCHITECTURE.md, .github/copilot-instructions.md)
 
 **Tested By**: _______________  
 **Date**: _______________  
