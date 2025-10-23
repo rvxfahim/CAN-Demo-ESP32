@@ -26,6 +26,11 @@ EXCLUDE_PATTERNS       = */lib/Generated/* \
                          */lib/Ui/* \
                          */src/generated_lecture_dbc.c
 
+# Skip helper unions that confuse Breathe's signature parser
+EXCLUDE_SYMBOLS        = BytesUnion \
+                         BytesUnion_FD \
+                         BitRef
+
 # Include path so Doxygen can resolve DBC types like Cluster_t
 INCLUDE_PATH           = ../lib/Generated/lib
 
