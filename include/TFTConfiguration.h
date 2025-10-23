@@ -1,4 +1,7 @@
-// TFTConfiguration.h
+/**
+ * @file TFTConfiguration.h
+ * @brief LVGL + TFT_eSPI display and touch global objects and dimensions.
+ */
 #ifndef TFTCONFIGURATION_H
 #define TFTCONFIGURATION_H
 

@@ -1,3 +1,10 @@
+/**
+ * @file UiController.h
+ * @brief LVGL-based UI controller with optional dedicated RTOS task and queues.
+ *
+ * Provides a small message bus for UI commands and an overwrite-queue for current
+ * instrument cluster data. Exposes helpers to switch screens and log messages.
+ */
 #ifndef UI_CONTROLLER_H
 #define UI_CONTROLLER_H
 
@@ -13,6 +20,10 @@
 #include "freertos/task.h"
 
 // Lightweight data payload for UI updates (overwrite-queue semantics)
+/**
+ * @struct UiData
+ * @brief Current dashboard state mapped for LVGL widgets.
+ */
 struct UiData
 {
   uint16_t speedArc;   // 0..240 mapped arc value
@@ -20,6 +31,7 @@ struct UiData
   bool rightActive;    // right turn signal active
 };
 
+/** UI message command types. */
 enum class UiMessageType : uint8_t
 {
   ShowDashboard,
@@ -29,6 +41,10 @@ enum class UiMessageType : uint8_t
   ShowFault
 };
 
+/**
+ * @struct UiMessage
+ * @brief UI command with optional text payload (for logs).
+ */
 struct UiMessage
 {
   UiMessageType type;
@@ -50,6 +66,10 @@ struct UiMessage
   }
 };
 
+/**
+ * @class UiController
+ * @brief Initializes LVGL, manages screens, and runs an optional UI task processing queues.
+ */
 class UiController
 {
 public:

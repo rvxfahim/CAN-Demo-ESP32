@@ -1,3 +1,7 @@
+/**
+ * @file NS2009.h
+ * @brief Simple I2C resistive touch controller (NS2009) interface used by the UI.
+ */
 #ifndef _NS2009_H_
 #define _NS2009_H_
 

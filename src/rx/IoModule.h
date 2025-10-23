@@ -1,3 +1,10 @@
+/**
+ * @file IoModule.h
+ * @brief Drives relay outputs for left/right indicators based on Cluster and SystemStatus.
+ *
+ * Subscribes to MessageRouter topics and implements a free-running 1 Hz blink with
+ * phase sync on rising edges. Outputs are gated by SystemStatus.outputsEnabled.
+ */
 #ifndef IO_MODULE_H
 #define IO_MODULE_H
 
@@ -10,18 +17,26 @@
 // Simple IO module controlling two relay outputs for left/right blinkers.
 // Subscribes to typed Cluster messages from MessageRouter.
 
+/**
+ * @class IOModule
+ * @brief Configures pins and maintains blink state machine for indicators.
+ */
 class IOModule
 {
 public:
   IOModule();
 
+  /** Initialize IO pins and polarity. */
   bool Init(uint8_t leftPin = IO_LEFT_RELAY_PIN, uint8_t rightPin = IO_RIGHT_RELAY_PIN, bool activeHigh = true);
 
   // Register subscription; call after router.Init()
+  /** Subscribe to router topics to start receiving updates. */
   bool Start(MessageRouter& router);
+  /** Unsubscribe from router topics. */
   void Stop(MessageRouter& router);
 
   // Call periodically from loop for blink timing
+  /** Update outputs based on time and requested state. */
   void Update(uint32_t nowMs);
 
 private:

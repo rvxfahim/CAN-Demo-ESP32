@@ -1,3 +1,7 @@
+/**
+ * @file IOPins.h
+ * @brief Default GPIO pin selections for relay outputs on the RX board.
+ */
 #ifndef IO_PINS_H
 #define IO_PINS_H
 

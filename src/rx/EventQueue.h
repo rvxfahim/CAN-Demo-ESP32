@@ -1,3 +1,10 @@
+/**
+ * @file EventQueue.h
+ * @brief FreeRTOS-backed event queue used to bridge ISR -> task and orchestrate system state.
+ *
+ * The queue transports initialization results, decoded Cluster frames, timeouts and error codes.
+ * PushFromISR() is safe from interrupt context; Pop() drains events in the main loop or tasks.
+ */
 #ifndef EVENT_QUEUE_H
 #define EVENT_QUEUE_H
 
@@ -6,6 +13,7 @@
 #include "freertos/queue.h"
 #include "lecture.h"
 
+/** High-level event categories transported through EventQueue. */
 enum class EventType : uint8_t
 {
   InitOk,
@@ -15,6 +23,7 @@ enum class EventType : uint8_t
   Error
 };
 
+/** Subsystems that may emit Init/Error events. */
 enum class Subsystem : uint8_t
 {
   CAN,
@@ -24,6 +33,10 @@ enum class Subsystem : uint8_t
   UI
 };
 
+/**
+ * @struct Event
+ * @brief Variant payload for queue transport.
+ */
 struct Event
 {
   EventType type;
@@ -75,15 +88,23 @@ struct Event
   }
 };
 
+/**
+ * @class EventQueue
+ * @brief Thin wrapper around FreeRTOS queue for typed Event messages.
+ */
 class EventQueue
 {
 public:
   EventQueue();
   ~EventQueue();
 
+  /** Initialize internal FreeRTOS queue. */
   bool Init(uint16_t queueLength = 10);
+  /** Enqueue an event from task context. */
   bool Push(const Event& event);
+  /** Enqueue an event from ISR context. */
   bool PushFromISR(const Event& event);
+  /** Dequeue an event with optional timeout. */
   bool Pop(Event& event, TickType_t timeout = 0);
 
 private:

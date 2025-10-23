@@ -1,3 +1,10 @@
+/**
+ * @file esp32_can.h
+ * @brief Convenience header exposing built-in ESP32 TWAI (CAN) and external MCP2517FD.
+ *
+ * Provides global instances `CAN0` (builtin TWAI) and `CAN1` (MCP2517FD over SPI)
+ * to match sketches and examples. Project RX uses `CAN0` with mailbox filters.
+ */
 #include "esp32_can_builtin.h"
 #include "mcp2517fd.h"  //uncomment if you've got a mcp2517fd attached to spi
 //#include "mcp2515.h" //uncomment if you've got a MCP2515 attached to SPI

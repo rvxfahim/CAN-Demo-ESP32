@@ -1,0 +1,33 @@
+# Doxyfile for CAN Lecture RX/TX
+# Generate XML for Breathe; no HTML output here.
+
+PROJECT_NAME           = "CAN Lecture RX/TX"
+OUTPUT_DIRECTORY       = _doxygen
+CREATE_SUBDIRS         = NO
+GENERATE_HTML          = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+RECURSIVE              = YES
+EXTRACT_ALL            = YES
+JAVADOC_AUTOBRIEF      = YES
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+
+# Inputs: project sources only (exclude platformio packages)
+INPUT                  = ../include \
+                         ../src \
+                         ../lib/CanDriver \
+                         ../lib/TouchLibrary
+FILE_PATTERNS          = *.h *.hpp *.c *.cpp
+
+# Exclusions: generated code, UI auto-code, DBC output sources (optional)
+EXCLUDE_PATTERNS       = */lib/Generated/* \
+                         */lib/Ui/* \
+                         */src/generated_lecture_dbc.c
+
+# Include path so Doxygen can resolve DBC types like Cluster_t
+INCLUDE_PATH           = ../lib/Generated/lib
+
+# Strip the project root from paths for cleaner names in docs
+STRIP_FROM_PATH        = ..
