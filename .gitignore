@@ -9,3 +9,8 @@ docs/_build/
 docs/_doxygen/
 _doxygen/
 docs/doxygen_output.txt
+ 
+# Diagrams (ignored per request)
+docs/diagrams/**/*.puml
+docs/diagrams/.plantuml-cache
+.vscode/extensions.json

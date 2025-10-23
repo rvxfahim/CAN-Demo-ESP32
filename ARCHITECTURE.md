@@ -4,59 +4,36 @@ This document reflects the current modular architecture with a central MessageRo
 
 ## RX: Top-Level Layout
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         MAIN.CPP (Entry Point)                   │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │EventQueue│  │ CanInterface │  │ SystemController │          │
-│  └────┬─────┘  └──────┬───────┘  └────────┬───────┘            │
-│       │                │                   │                    │
-│       └────────────────┴───────────────────┘                    │
-│                           │                                     │
-│                    ┌──────▼───────┐                              │
-│                    │ MessageRouter│  (pub/sub + last-seen)       │
-│                    └──────┬───────┘                              │
-│                           │                                     │
-│      ┌────────────────────┼──────────────────────┐               │
-│  ┌───▼───────┐        ┌───▼───────┐        ┌────▼────────┐      │
-│  │UiController│        │ IOModule  │        │HealthMonitor│      │
-│  └────────────┘        └───────────┘        └─────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
-```
+![RX Architecture — Components](docs/diagrams/out/docs/diagrams/architecture_component/Architecture%20Component%20Overview.svg)
 
 ## RX: State Machine Flow
 
-```
-Boot → DisplayInit → WaitingForData → Active
-Active ⇄ Degraded (stale data)
-Any → Fault (unrecoverable)
+![RX System State Machine](docs/diagrams/out/docs/diagrams/rx_state_machine/RX%20System%20State%20Machine.svg)
 
 Triggers:
 - First Cluster frame → WaitingForData → Active
 - HealthMonitor timeout → Active → Degraded
 - New Cluster after Degraded → Degraded → Active (auto-recovery)
-```
 
 ## RX: Event/Data Flow
 
-```
-CAN ISR → EventQueue → SystemController → MessageRouter → Subscribers
+![CAN RX Frame Flow](docs/diagrams/out/docs/diagrams/can_sequence_rx/CAN%20RX%20Frame%20Flow.svg)
 
+Details:
 1) ISR (CanInterface::CanMsgHandler)
-   - Validates ID/DLC/IDE for Cluster (0x65, 3 bytes, std)
-   - Unpacks to Cluster_t via Unpack_Cluster_lecture()
-   - Pushes Event::ClusterFrame to EventQueue (ISR-safe)
+  - Validates ID/DLC/IDE for Cluster (0x65, 3 bytes, std)
+  - Unpacks to Cluster_t via Unpack_Cluster_lecture()
+  - Pushes Event::ClusterFrame to EventQueue (ISR-safe)
 
 2) Main loop
-   - Pop event; SystemController::Dispatch(event)
-   - Publish Cluster_t to MessageRouter with millis() timestamp
-   - Update state transitions
+  - Pop event; SystemController::Dispatch(event)
+  - Publish Cluster_t to MessageRouter with millis() timestamp
+  - Update state transitions
 
 3) Subscribers
-   - UiController: maps Cluster_t → widgets; services lv_timer_handler()
-   - IOModule: drives relay GPIOs; internal 1 Hz blink independent of bus rate
-   - HealthMonitor: pull last-seen from router; emits FrameTimeout to queue
-```
+  - UiController: maps Cluster_t → widgets; services lv_timer_handler()
+  - IOModule: drives relay GPIOs; internal 1 Hz blink independent of bus rate
+  - HealthMonitor: pull last-seen from router; emits FrameTimeout to queue
 
 ## RX: Module Responsibilities
 
@@ -121,6 +98,16 @@ TX board is a small producer of `Cluster` frames (ID 0x65), without LVGL or UI. 
   - `CAN0.setDebuggingMode(true);` (verbose diagnostics)
 - Frame cadence: typically 20–100 Hz during tests
 - Scope for extension: additional messages can be added by packing other DBC-defined signals
+
+### TX Send Sequence
+
+![TX Board Send Flow](docs/diagrams/out/docs/diagrams/tx_sequence_send/TX%20Board%20Send%20Flow.svg)
+
+---
+
+### RX Class Diagram
+
+![RX Class Diagram](docs/diagrams/out/docs/diagrams/rx_class_diagram/RX%20Class%20Diagram.svg)
 
 ## Build/Env Notes
 
