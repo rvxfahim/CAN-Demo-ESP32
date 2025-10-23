@@ -4,11 +4,11 @@ This document reflects the current modular architecture with a central MessageRo
 
 ## RX: Top-Level Layout
 
-![RX Architecture — Components](docs/diagrams/out/docs/diagrams/architecture_component/Architecture%20Component%20Overview.svg)
+![RX Architecture — Components](_static/diagrams/architecture_component/Architecture%20Component%20Overview.svg)
 
 ## RX: State Machine Flow
 
-![RX System State Machine](docs/diagrams/out/docs/diagrams/rx_state_machine/RX%20System%20State%20Machine.svg)
+![RX System State Machine](_static/diagrams/rx_state_machine/RX%20System%20State%20Machine.svg)
 
 Triggers:
 - First Cluster frame → WaitingForData → Active
@@ -17,7 +17,7 @@ Triggers:
 
 ## RX: Event/Data Flow
 
-![CAN RX Frame Flow](docs/diagrams/out/docs/diagrams/can_sequence_rx/CAN%20RX%20Frame%20Flow.svg)
+![CAN RX Frame Flow](_static/diagrams/can_sequence_rx/CAN%20RX%20Frame%20Flow.svg)
 
 Details:
 1) ISR (CanInterface::CanMsgHandler)
@@ -101,13 +101,13 @@ TX board is a small producer of `Cluster` frames (ID 0x65), without LVGL or UI. 
 
 ### TX Send Sequence
 
-![TX Board Send Flow](docs/diagrams/out/docs/diagrams/tx_sequence_send/TX%20Board%20Send%20Flow.svg)
+![TX Board Send Flow](_static/diagrams/tx_sequence_send/TX%20Board%20Send%20Flow.svg)
 
 ---
 
 ### RX Class Diagram
 
-![RX Class Diagram](docs/diagrams/out/docs/diagrams/rx_class_diagram/RX%20Class%20Diagram.svg)
+![RX Class Diagram](_static/diagrams/rx_class_diagram/RX%20Class%20Diagram.svg)
 
 ## Build/Env Notes
 
