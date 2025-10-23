@@ -1,0 +1,4 @@
+# Architecture
+
+```{include} ../ARCHITECTURE.md
+```
