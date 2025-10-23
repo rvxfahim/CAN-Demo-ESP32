@@ -34,6 +34,9 @@ myst_enable_extensions = [
     "attrs_block",
 ]
 
+# Enable eval-rst for embedding Breathe directives
+myst_fence_as_directive = ["eval-rst"]
+
 templates_path = ["_templates"]
 exclude_patterns = [
     "_build",
@@ -62,7 +65,7 @@ def _maybe_run_doxygen():
     This makes local and CI builds resilient: if Doxygen isn't installed,
     the Sphinx build still succeeds (API page will show a note instead).
     """
-    doxyfile = _DOCS_DIR / "Doxyfile"
+    doxyfile = _DOCS_DIR / "Doxyfile.generated"
     if not doxyfile.exists():
         return
     force = os.environ.get("DOXYGEN_FORCE", "0") == "1"
@@ -82,6 +85,9 @@ if _DOXY_XML.exists():
         "CAN_Lecture": str(_DOXY_XML),
     }
     breathe_default_project = "CAN_Lecture"
+    breathe_show_include = False
+    breathe_show_enumvalue_initializer = True
+    breathe_default_members = ('members', 'undoc-members')
     # Expose a tag so pages can conditionally include Breathe directives
     try:
         tags.add("with_doxygen")  # type: ignore[name-defined]

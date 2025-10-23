@@ -128,7 +128,7 @@ void CAN_COMMON::setDebuggingMode(bool mode)
 /**
  * \brief Returns whether a serious fault has occurred.
  *
- * \ret  Bool indicating whether interface has any sort of fault or not
+ * \return Bool indicating whether interface has any sort of fault or not
  */
 bool CAN_COMMON::isFaulted()
 {
@@ -138,7 +138,7 @@ bool CAN_COMMON::isFaulted()
 /**
  * \brief Returns whether a serious reception fault has occurred.
  *
- * \ret  Bool indicating whether interface has a fault in receiving frames
+ * \return Bool indicating whether interface has a fault in receiving frames
  */
 bool CAN_COMMON::hasRXFault()
 {
@@ -148,7 +148,7 @@ bool CAN_COMMON::hasRXFault()
 /**
  * \brief Returns whether a serious frame transmission fault has occurred.
  *
- * \ret  Bool indicating whether interface has a fault in transmitting frames
+ * \return Bool indicating whether interface has a fault in transmitting frames
  */
 bool CAN_COMMON::hasTXFault()
 {
@@ -158,7 +158,7 @@ bool CAN_COMMON::hasTXFault()
 /**
  * \brief Returns whether this interface supports CANFD or not. 
  *
- * \ret  Bool indicating whether interface can support CANFD or not.
+ * \return Bool indicating whether interface can support CANFD or not.
  *
  * \note This is used for outside the class, internally fdSupported is directly used
  */

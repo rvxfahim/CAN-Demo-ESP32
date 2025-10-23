@@ -6,17 +6,34 @@ title: C/C++ API Reference
 
 This section is generated from the source code using Doxygen + Breathe.
 
-If this page appears empty in local builds, ensure Doxygen is installed and re-run the docs build. In CI, we attempt to run Doxygen automatically when available.
-
-```{only} with_doxygen
 ```{eval-rst}
-.. doxygenindex::
+.. doxygenclass:: MessageRouter
+   :members:
    :project: CAN_Lecture
-```
-```
 
-```{only} without_doxygen
-Note: Doxygen XML was not found during this build. The API index is hidden. Install Doxygen and rebuild, or enable it in CI.
+.. doxygenclass:: SystemController
+   :members:
+   :project: CAN_Lecture
+
+.. doxygenclass:: EventQueue
+   :members:
+   :project: CAN_Lecture
+
+.. doxygenclass:: CanInterface
+   :members:
+   :project: CAN_Lecture
+
+.. doxygenclass:: IOModule
+   :members:
+   :project: CAN_Lecture
+
+.. doxygenclass:: UiController
+   :members:
+   :project: CAN_Lecture
+
+.. doxygenclass:: HealthMonitor
+   :members:
+   :project: CAN_Lecture
 ```
 
 ## Quick links
