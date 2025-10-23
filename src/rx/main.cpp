@@ -2,6 +2,8 @@
 // Each subsystem is encapsulated in its own module with clear interfaces
 
 #include <Arduino.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "EventQueue.h"
 #include "CanInterface.h"
 #include "UiController.h"
@@ -19,6 +21,10 @@ HealthMonitor healthMonitor;
 MessageRouter messageRouter;
 IOModule ioModule;
 SystemController* systemController = nullptr;
+
+// Forward declarations for FreeRTOS task
+static void ProcessingTask(void* param);
+static TaskHandle_t sProcessingTaskHandle = nullptr;
 
 struct RouterSinks
 {
@@ -70,27 +76,50 @@ void setup()
   // Subscribe UI+Health to router after UI task is running
   messageRouter.SubscribeCluster(&RouterUiCb, &sinks);
   // UI task is started inside SystemController::RunBootSequence()
+
+  // Create high-frequency processing task pinned to core 0
+  // Runs the former loop() work at ~1 tick cadence
+  xTaskCreatePinnedToCore(
+      ProcessingTask,
+      "RxProcessTask",
+      4096,
+      nullptr,
+      2,
+      &sProcessingTaskHandle,
+      0  // core 0
+  );
 }
 
 void loop()
 {
-  if (systemController == nullptr)
+  // Main Arduino loop sleeps; work handled by ProcessingTask on core 0
+  vTaskDelay(pdMS_TO_TICKS(10000));
+}
+
+// Task pinned to core 0 executing the former loop() operations
+namespace {
+static void ProcessingTask(void* /*param*/)
+{
+  for(;;)
   {
-    return;
+    if (systemController != nullptr)
+    {
+      // Process all pending events
+      Event event;
+      while (eventQueue.Pop(event, 0))
+      {
+        systemController->Dispatch(event);
+      }
+
+      // Update health monitoring (checks for timeouts)
+      systemController->Update();
+
+      // Update IO blink timing
+      ioModule.Update(millis());
+    }
+
+    // High-frequency cadence: sleep 1 tick to yield CPU
+    vTaskDelay(1);
   }
-
-  // Process all pending events
-  Event event;
-  while (eventQueue.Pop(event, 0))
-  {
-    systemController->Dispatch(event);
-  }
-
-  // Update health monitoring (checks for timeouts)
-  systemController->Update();
-
-  // Update IO blink timing
-  ioModule.Update(millis());
-
-  taskYIELD();
+}
 }

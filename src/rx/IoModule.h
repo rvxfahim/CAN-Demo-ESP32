@@ -26,7 +26,9 @@ public:
 
 private:
   static void ClusterCb_(const Cluster_t& msg, uint32_t tsMs, void* ctx);
+  static void StatusCb_(const MessageRouter::SystemStatus& status, uint32_t tsMs, void* ctx);
   void OnCluster_(const Cluster_t& msg, uint32_t tsMs);
+  void OnStatus_(const MessageRouter::SystemStatus& status, uint32_t tsMs);
   void ApplyOutputs_();
 
   uint8_t leftPin_ = IO_LEFT_RELAY_PIN;
@@ -46,6 +48,9 @@ private:
   bool rightOn_ = false;
   // Set by OnCluster_ on rising edge; consumed by Update() to align phase and drive first ON
   volatile bool phaseSync_ = false;
+
+  // System gating
+  volatile bool outputsEnabled_ = false; // default to safe
 };
 
 #endif // IO_MODULE_H

@@ -14,6 +14,14 @@ bool MessageRouter::Init(std::size_t maxClusterSubs)
   clusterSubCount_ = 0;
   haveCluster_ = false;
   lastClusterTsMs_ = 0;
+
+  // Allocate default capacity for status subscribers (same as cluster by default)
+  maxStatusSubs_ = maxClusterSubs_;
+  statusSubs_ = new SystemStatusSub[maxStatusSubs_];
+  if (!statusSubs_) return false;
+  statusSubCount_ = 0;
+  haveStatus_ = false;
+  lastStatusTsMs_ = 0;
   return true;
 }
 
@@ -74,5 +82,55 @@ bool MessageRouter::GetLastSeenMs(uint32_t& tsMs) const
 {
   if (!haveCluster_) return false;
   tsMs = lastClusterTsMs_;
+  return true;
+}
+
+bool MessageRouter::SubscribeSystemStatus(SystemStatusCallback cb, void* ctx)
+{
+  if (!cb || !statusSubs_ || statusSubCount_ >= maxStatusSubs_) return false;
+  for (std::size_t i = 0; i < statusSubCount_; ++i)
+  {
+    if (statusSubs_[i].cb == cb && statusSubs_[i].ctx == ctx) return true;
+  }
+  statusSubs_[statusSubCount_++] = SystemStatusSub{cb, ctx};
+  return true;
+}
+
+void MessageRouter::UnsubscribeSystemStatus(SystemStatusCallback cb, void* ctx)
+{
+  if (!statusSubs_ || statusSubCount_ == 0) return;
+  for (std::size_t i = 0; i < statusSubCount_; ++i)
+  {
+    if (statusSubs_[i].cb == cb && statusSubs_[i].ctx == ctx)
+    {
+      for (std::size_t j = i + 1; j < statusSubCount_; ++j)
+      {
+        statusSubs_[j - 1] = statusSubs_[j];
+      }
+      --statusSubCount_;
+      break;
+    }
+  }
+}
+
+void MessageRouter::PublishSystemStatus(const SystemStatus& status, uint32_t tsMs)
+{
+  lastStatus_ = status;
+  lastStatusTsMs_ = tsMs;
+  haveStatus_ = true;
+  for (std::size_t i = 0; i < statusSubCount_; ++i)
+  {
+    if (statusSubs_[i].cb)
+    {
+      statusSubs_[i].cb(status, tsMs, statusSubs_[i].ctx);
+    }
+  }
+}
+
+bool MessageRouter::GetLastSystemStatus(SystemStatus& out, uint32_t& tsMs) const
+{
+  if (!haveStatus_) return false;
+  out = lastStatus_;
+  tsMs = lastStatusTsMs_;
   return true;
 }

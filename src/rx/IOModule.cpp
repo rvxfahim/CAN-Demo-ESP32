@@ -27,16 +27,34 @@ bool IOModule::Init(uint8_t leftPin, uint8_t rightPin, bool activeHigh)
 
 bool IOModule::Start(MessageRouter& router)
 {
-  return router.SubscribeCluster(&IOModule::ClusterCb_, this);
+  bool ok1 = router.SubscribeCluster(&IOModule::ClusterCb_, this);
+  bool ok2 = router.SubscribeSystemStatus(&IOModule::StatusCb_, this);
+  return ok1 && ok2;
 }
 
 void IOModule::Stop(MessageRouter& router)
 {
   router.UnsubscribeCluster(&IOModule::ClusterCb_, this);
+  router.UnsubscribeSystemStatus(&IOModule::StatusCb_, this);
 }
 
 void IOModule::Update(uint32_t nowMs)
 {
+  // Gate all behavior based on system status
+  if (!outputsEnabled_)
+  {
+    // ensure safe state
+    if (leftOn_ || rightOn_ || leftRequested_ || rightRequested_)
+    {
+      leftRequested_ = false;
+      rightRequested_ = false;
+      leftOn_ = false;
+      rightOn_ = false;
+      ApplyOutputs_();
+    }
+    return;
+  }
+
   // Staleness: if no update for > 1000 ms, force off
   if (lastUpdateMs_ != 0 && (nowMs - lastUpdateMs_) > 1000)
   {
@@ -89,6 +107,9 @@ void IOModule::ClusterCb_(const Cluster_t& msg, uint32_t tsMs, void* ctx)
 
 void IOModule::OnCluster_(const Cluster_t& msg, uint32_t tsMs)
 {
+  // Ignore cluster updates when outputs are disabled for safety
+  if (!outputsEnabled_) return;
+
   lastUpdateMs_ = tsMs;
   const bool newLeftReq = msg.Left_Turn_Signal != 0;
   const bool newRightReq = msg.Right_Turn_Signal != 0;
@@ -106,6 +127,28 @@ void IOModule::OnCluster_(const Cluster_t& msg, uint32_t tsMs)
     phaseSync_ = true;
   }
   // Do not reset nextToggleMs_ on every message; let Update() drive cadence
+}
+
+void IOModule::StatusCb_(const MessageRouter::SystemStatus& status, uint32_t tsMs, void* ctx)
+{
+  auto* self = static_cast<IOModule*>(ctx);
+  if (!self) return;
+  self->OnStatus_(status, tsMs);
+}
+
+void IOModule::OnStatus_(const MessageRouter::SystemStatus& status, uint32_t /*tsMs*/)
+{
+  const bool wasEnabled = outputsEnabled_;
+  outputsEnabled_ = status.outputsEnabled;
+  if (!outputsEnabled_ && wasEnabled)
+  {
+    // Immediately go to safe state
+    leftRequested_ = false;
+    rightRequested_ = false;
+    leftOn_ = false;
+    rightOn_ = false;
+    ApplyOutputs_();
+  }
 }
 
 void IOModule::ApplyOutputs_()
