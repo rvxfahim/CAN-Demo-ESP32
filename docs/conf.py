@@ -3,6 +3,14 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# Provide a stub for Sphinx 'tags' in non-Sphinx contexts (linters/tests)
+_tags_obj = globals().get("tags", None)
+if _tags_obj is None:
+    class _Tags:
+        def add(self, *_args, **_kwargs):
+            pass
+    tags = _Tags()
+
 # -- Project information -----------------------------------------------------
 
 project = "CAN Lecture RX/TX"
@@ -74,6 +82,15 @@ if _DOXY_XML.exists():
         "CAN_Lecture": str(_DOXY_XML),
     }
     breathe_default_project = "CAN_Lecture"
+    # Expose a tag so pages can conditionally include Breathe directives
+    try:
+        tags.add("with_doxygen")  # type: ignore[name-defined]
+    except Exception:
+        pass
 else:
     # Provide empty config so Sphinx doesn't error if 'breathe' is present
     breathe_projects = {}
+    try:
+        tags.add("without_doxygen")  # type: ignore[name-defined]
+    except Exception:
+        pass
