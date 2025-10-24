@@ -4,6 +4,11 @@ A demonstration project showcasing **CAN bus communication** between two ESP32 b
 
 ---
 
+<!-- Demo GIF: relative path so it renders both on GitHub and in the docs site -->
+<p align="center">
+   <img src="docs/demo.gif" alt="CAN demo" />
+</p>
+
 ## 🎯 What This Project Demonstrates
 
 1. **CAN Bus Communication**  

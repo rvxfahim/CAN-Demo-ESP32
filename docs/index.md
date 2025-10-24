@@ -2,6 +2,11 @@
 
 Welcome to the CAN Lecture RX/TX project documentation. This site covers how the project is structured, how to build and run it on the ESP32 boards, and how data flows through the system.
 
+<!-- Demo GIF shown in docs (relative path). File: docs/demo.gif -->
+<p align="center">
+	<img src="demo.gif" alt="CAN demo" />
+</p>
+
 ## Contents
 
 ```{toctree}
