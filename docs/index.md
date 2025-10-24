@@ -4,7 +4,7 @@ Welcome to the CAN Lecture RX/TX project documentation. This site covers how the
 
 <!-- Demo GIF shown in docs (relative path). File: docs/demo.gif -->
 <p align="center">
-	<img src="demo.gif" alt="CAN demo" />
+	<img src="./demo.gif" alt="CAN demo" />
 </p>
 
 ## Contents
