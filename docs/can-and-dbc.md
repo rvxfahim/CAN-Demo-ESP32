@@ -8,6 +8,11 @@ This project uses a DBC-driven workflow to encode/decode CAN frames consistently
 - Generated C wrapper (do not edit): `lib/Generated/lib/lecture.{c,h}`
 - Single include in the project: `src/generated_lecture_dbc.c` (pulls in the generated library)
 
+Note: the generator produces a driver named `lecture` (that's the `-drvname` value used here). Include
+`lib/Generated/lib/lecture.h` in your code to get the generated types and helper functions (for example
+`Cluster_t`, `Pack_Cluster_lecture(...)`, `Unpack_Cluster_lecture(...)`). The project also provides
+`src/generated_lecture_dbc.c` which includes the generated C file directly for the build.
+
 Driver abstraction lives under `lib/CanDriver/` and supports the ESP32 internal CAN controller and common external controllers.
 
 ## Regenerating from DBC (Windows)
@@ -17,6 +22,12 @@ Driver abstraction lives under `lib/CanDriver/` and supports the ESP32 internal 
 
    - Tool: `tools/c-coderdbc/build/coderdbc.exe`
    - Output folder (autodetected by script): `lib/Generated/` (subfolders are managed by the generator)
+
+   - Example (Windows, run from the repository root):
+
+     ```cmd
+     tools\c-coderdbc\build\Debug\coderdbc.exe -dbc tools\Lecture.dbc -out lib\Generated -drvname lecture -rw
+     ```
 
 3. Commit the updated files under `lib/Generated/`.
 
