@@ -113,18 +113,27 @@ You can edit this file with any text editor or use tools like [CANdb++ Editor](h
 
 #### Step 2: Run the Code Generator
 
+**Linux/macOS:**
+Use the provided helper scripts to build the tool and generate the code:
+```bash
+# First, build the coderdbc tool (only needed once)
+./tools/build_coderdbc.sh
+
+# Then, generate the C code from Lecture.dbc
+./tools/generate_code.sh
+```
+
 **Windows:**
 ```powershell
 cd tools\c-coderdbc
-.\build\coderdbc.exe -dbc ..\Lecture.dbc -out ..\..\lib\Generated
+# Compile the tool first using CMake (or use a pre-compiled binary)
+# Then run the generator:
+.\build\coderdbc.exe -dbc ..\Lecture.dbc -out ..\..\lib\Generated -drvname lecture -rw -nodeutils
 ```
 
 This regenerates:
 - `lib/Generated/lib/lecture.c` and `lecture.h` (generated code, **do not edit**)
 - Helper files in `lib/Generated/conf/`, `lib/Generated/inc/`, etc.
-
-**Linux/macOS:**  
-You'll need to compile `c-coderdbc` from source (see `tools/c-coderdbc/README.md`).
 
 #### Step 3: Use Generated Types in Code
 
@@ -201,6 +210,7 @@ Topics covered:
 
 ### Display and UI
 - **Screen:** Configured in `include/TFTConfiguration.h` and `lib/Ui/`
+- **TFT_eSPI Setup:** Edit `include/tft_setup.h` (project-owned persistent config). Do **not** edit `.pio/libdeps/.../TFT_eSPI/User_Setup*.h` because PlatformIO reinstalls those files.
 - **UI Design:** Edit with [SquareLine Studio](https://squareline.io/), export to `lib/Ui/`
 - **Widgets:** Arc gauge (`ui_Arc1`), labels (`ui_RightLabel`, `ui_LeftLabel`)
 
