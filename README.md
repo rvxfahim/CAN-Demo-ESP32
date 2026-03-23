@@ -52,7 +52,7 @@ A demonstration project showcasing **CAN bus communication** between two ESP32 b
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/rvxfahim/CAN-Demo-ESP32.git
+   git clone --recursive https://github.com/rvxfahim/CAN-Demo-ESP32.git
    cd CAN-Demo-ESP32
    ```
 
