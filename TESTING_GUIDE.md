@@ -1,5 +1,7 @@
 # RX Firmware Testing Guide (MessageRouter Architecture)
 
+> First-time setup: run `tools/setup.sh` (macOS/Linux) or `tools/setup.ps1` (Windows) to install/check the toolchain; it does not generate code. Then build the generator with `tools/build_coderdbc.sh` / `.ps1` and run `tools/generate_code.sh` / `.ps1` to create `lib/Generated/` before building. The generated files are not committed; see the Getting Started page.
+
 ## Build & Upload
 
 ### 1. Build the RX Firmware
@@ -14,10 +16,10 @@ Expected output:
 
 ### 2. Upload to RX Board
 ```bash
-pio run -e rx_board -t upload
+pio run -e rx_board -t upload --upload-port COM8
 ```
 
-Upload port: as configured in `platformio.ini` (example: COM8)
+Upload port: find it with `pio device list`, then pass `--upload-port COM8` or set it in `platformio.ini`. See the Getting Started page for first-time setup.
 
 ### 3. Monitor Serial Output
 ```bash
@@ -234,7 +236,6 @@ void loop() {
 ### Symptom: Stuck in WaitingForData despite TX transmitting
 **Diagnosis**: CAN ISR not firing or event queue full  
 **Fix**: 
-- Check CAN bus termination resistors
 - Verify frame ID matches `Cluster_CANID` (0x65)
 - Increase EventQueue size in `EventQueue::Init()`
 

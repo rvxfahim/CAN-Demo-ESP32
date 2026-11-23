@@ -16,7 +16,7 @@ Purpose: Get an AI coding agent productive fast in this dual-target ESP32 CAN pr
 - State machine: Boot → DisplayInit → WaitingForData → Active ⇄ Degraded (stale) → Fault (unrecoverable). Recovery is automatic when frames resume.
 
 ## CAN and DBC
-- DBC source: `tools/Lecture.dbc`. Generate `lib/Generated/lib/lecture.{c,h}` via `tools/c-coderdbc/build/coderdbc.exe` (readonly mode). Don’t edit generated files.
+- DBC source: `tools/Lecture.dbc`. Build the generator with `tools/build_coderdbc.sh` (macOS/Linux) or `tools/build_coderdbc.ps1` (Windows), then run `tools/generate_code.sh` / `tools/generate_code.ps1` to produce `lib/Generated/lib/lecture.{c,h}` (readonly mode). The setup scripts only install/check the toolchain. Don’t edit generated files.
 - Single include: `src/generated_lecture_dbc.c`. Use `Cluster_t`, `Pack_Cluster_lecture`, `Unpack_Cluster_lecture`.
 - Driver: `lib/CanDriver/esp32_can.*` (pins 35/5, 500 kbps). RX uses mailbox filter `watchFor(0x65)`; fallback to general callback if needed.
 - TX specifics: no LVGL; always `CAN0.setDebuggingMode(true)` and send `Cluster` using `Pack_Cluster_lecture`.

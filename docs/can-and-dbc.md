@@ -5,7 +5,7 @@ This project uses a DBC-driven workflow to encode/decode CAN frames consistently
 ## Sources and generated code
 
 - DBC source: `tools/Lecture.dbc`
-- Generated C wrapper (do not edit): `lib/Generated/lib/lecture.{c,h}`
+- Generated C driver (do not edit): `lib/Generated/lib/lecture.{c,h}`
 - Single include in the project: `src/generated_lecture_dbc.c` (pulls in the generated library)
 
 Note: the generator produces a driver named `lecture` (that's the `-drvname` value used here). Include
@@ -15,21 +15,21 @@ Note: the generator produces a driver named `lecture` (that's the `-drvname` val
 
 Driver abstraction lives under `lib/CanDriver/` and supports the ESP32 internal CAN controller and common external controllers.
 
-## Regenerating from DBC (Windows)
+## Regenerating from DBC
 
-1. Ensure the DBC is saved at `tools/Lecture.dbc`.
-2. Run the generator (Windows only, provided in repo):
+`lib/Generated/` is **not committed**; it is generated locally and listed in `.gitignore`. Generate it after cloning and regenerate after every change to `tools/Lecture.dbc` — this is part of the exercise.
 
-   - Tool: `tools/c-coderdbc/build/coderdbc.exe`
-   - Output folder (autodetected by script): `lib/Generated/` (subfolders are managed by the generator)
+The full per-OS instructions live in the Getting Started page (the README is the single source of truth): https://rvxfahim.github.io/CAN-Demo-ESP32/getting-started.html
 
-   - Example (Windows, run from the repository root):
+Quick reference:
 
-     ```cmd
-     tools\c-coderdbc\build\Debug\coderdbc.exe -dbc tools\Lecture.dbc -out lib\Generated -drvname lecture -rw
-     ```
+- macOS/Linux: `./tools/build_coderdbc.sh`, then `./tools/generate_code.sh`
+- Windows: `powershell -ExecutionPolicy Bypass -File .\tools\build_coderdbc.ps1`, then `powershell -ExecutionPolicy Bypass -File .\tools\generate_code.ps1`
+- The setup scripts (`setup.sh` / `setup.ps1`) only install/check the toolchain; they do not build the generator or generate code.
+- Requirements: CMake and a C++17 compiler.
+- The `build_coderdbc` scripts initialize `tools/c-coderdbc` when needed, and the `generate_code` scripts find the generator in both `build/` and `build/<Config>/` (Visual Studio writes `build\Release\coderdbc.exe`).
 
-3. Commit the updated files under `lib/Generated/`.
+Do **not** commit `lib/Generated/`; commit only the DBC change.
 
 The code should always use the generated types and pack/unpack helpers:
 
